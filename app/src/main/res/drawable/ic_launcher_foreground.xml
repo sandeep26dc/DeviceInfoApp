@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer Glowing Chip Border -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M34,20h40c4.42,0 8,3.58 8,8v52c0,4.42 -3.58,8 -8,8H34c-4.42,0 -8,-3.58 -8,-8V28c0,-4.42 3.58,-8 8,-8z"
+        android:fillAlpha="0.15"/>
+
+    <!-- Smartphone Body Outline -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M36,22h36c3.31,0 6,2.69 6,6v52c0,3.31 -2.69,6 -6,6H36c-3.31,0 -6,-2.69 -6,-6V28c0,-3.31 2.69,-6 6,-6zM34,28v52c0,1.1 0.9,2 2,2h36c1.1,0 2,-0.9 2,-2V28c0,-1.1 -0.9,-2 -2,-2H36c-1.1,0 -2,0.9 -2,2z"/>
+
+    <!-- Hardware CPU / Diagnostics Lines -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M44,36h20v4H44zzM40,44h28v4H40zzM40,52h28v4H40zzM44,60h20v4H44zz"/>
+
+    <!-- Accent Micro-Details -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,38h16v1H46zzM42,46h24v1H42zzM42,54h24v1H42zzM46,62h16v1H46zz"/>
+
+    <!-- Speaker Notch & Home Sensor Button -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M49,25h10v2H49zzM54,73m-2.5,0a2.5,2.5 0 1,0 5,0a2.5,2.5 0 1,0 -5,0"/>
+</vector>
