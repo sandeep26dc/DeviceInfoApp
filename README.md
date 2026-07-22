@@ -1,9 +1,11 @@
 <div align="center">
 
-  <!-- Matrix Animated Header Banner -->
-  <img src="https://capsule-render.vercel.app/api?type=matrix&color=00FF9D&height=200&section=header&text=DEVICE%20INSIGHT%20HUD&fontSize=42&fontColor=00FF9D&animation=twinkle&fontAlignY=42" width="100%" alt="Matrix Telemetry Header" />
+  <!-- Matrix Typing SVG Banner -->
+  <h1 align="center">
+    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=30&pause=1000&color=00FF9D&center=true&vCenter=true&width=600&lines=%3E_DEVICE+INSIGHT+HUD;%3E_SYSTEM+DIAGNOSTICS+CONSOLE;%3E_DEVELOPED+BY+SANDEEP+SOM" alt="Matrix Terminal Header" />
+  </h1>
 
-  <p><strong>SYSTEM DIAGNOSTIC & HARDWARE TELEMETRY CONSOLE • v3.0.0</strong></p>
+  <p><strong>HARDWARE TELEMETRY & SYSTEM DIAGNOSTICS ENGINE • v3.0.0</strong></p>
   <p><em>Architected & Developed by <strong>SANDEEP SOM</strong> • <code>@sandeep26dc</code></em></p>
 
   <br>
@@ -24,7 +26,7 @@
 
   <br><br>
 
-  <!-- Device Frame Mockup -->
+  <!-- Device Frame Mockup (Note: Replace this image once you upload to docs/screenshots/ terminal_preview.png) -->
   <img src="docs/screenshots/terminal_preview.png" width="340" alt="DeviceInfoApp HUD Interface" style="border: 2px solid #00FF9D; border-radius: 12px; box-shadow: 0 0 25px rgba(0, 255, 157, 0.4);">
 
   <br><br>
@@ -34,18 +36,3 @@
   </p>
 
 </div>
-
----
-
-## 💻 `SYS_DIAGNOSTICS` // Functional Index
-
-```text
- ┌─────────────────────────────────────────────────────────────────────────┐
- │                   M A T R I X   D I A G N O S T I C S                   │
- ├───────────────────┬──────────────────────┬──────────────────────────────┤
- │  01 // SOC & CPU  │  02 // THERMAL MATRIX│  03 // MEMORY & STORAGE      │
- ├───────────────────┼──────────────────────┼──────────────────────────────┤
- │ • Core Frequencies│ • Battery Volts (mV) │ • Active RAM Allocation      │
- │ • Big.LITTLE Loads│ • Temp Thresholds    │ • Swap / Cache Metrics       │
- │ • ABI & Instruction│ • Thermal Throttling │ • Flash Storage Blocks       │
- └───────────────────┴──────────────────────┴──────────────────────────────┘
