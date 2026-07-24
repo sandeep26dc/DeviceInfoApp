@@ -49,6 +49,6 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     
-    // Coroutines for real-time hardware clock updates
+    // Asynchronous monitoring for live core frequencies
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
