@@ -29,8 +29,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -45,10 +45,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.RandomAccessFile
 import kotlin.math.roundToInt
@@ -65,22 +65,7 @@ data class CameraSpecInfo(
     val id: String,
     val facing: String,
     val megapixels: String,
-    val sensorOrientation: Int,
     val hasFlash: Boolean
-)
-
-data class WifiSpecInfo(
-    val isSupported: Boolean,
-    val isEnabled: Boolean,
-    val is5GHzSupported: Boolean,
-    val is6GHzSupported: Boolean,
-    val linkSpeedMbps: Int
-)
-
-data class BluetoothSpecInfo(
-    val isSupported: Boolean,
-    val isEnabled: Boolean,
-    val leSupported: Boolean
 )
 
 data class ComprehensiveDeviceSpec(
@@ -101,27 +86,17 @@ data class ComprehensiveDeviceSpec(
     val kernelVersion: String,
     val batteryLevel: Int,
     val batteryStatusStr: String,
-    val batteryHealthStr: String,
     val batteryTemp: Float,
     val batteryVoltage: Int,
     val screenResolution: String,
     val screenDensityDpi: Int,
     val activeCores: Int,
     val networkType: String,
+    val wifiState: String,
+    val bluetoothState: String,
     val isRooted: Boolean,
-    val cameras: List<CameraSpecInfo>,
-    val wifiInfo: WifiSpecInfo,
-    val bluetoothInfo: BluetoothSpecInfo
+    val cameras: List<CameraSpecInfo>
 )
-
-enum class NavigationTab(val title: String) {
-    HARDWARE("Hardware"),
-    CPU_CORES("CPU Nodes"),
-    CONNECTIVITY("Wireless"),
-    CAMERA("Cameras"),
-    SOFTWARE("System OS"),
-    SENSORS("Sensors")
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,7 +104,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
-                ExecutiveDeviceApp()
+                CleanDeviceInfoApp()
             }
         }
     }
@@ -172,8 +147,7 @@ object ComprehensiveExtractor {
 
     fun extractCameras(context: Context): List<CameraSpecInfo> {
         val list = mutableListOf<CameraSpecInfo>()
-        val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
-            ?: return list
+        val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager ?: return list
 
         runCatching {
             for (id in cameraManager.cameraIdList) {
@@ -182,66 +156,20 @@ object ComprehensiveExtractor {
                 val facingStr = when (facingInt) {
                     CameraCharacteristics.LENS_FACING_FRONT -> "Front Facing"
                     CameraCharacteristics.LENS_FACING_BACK -> "Rear Main"
-                    else -> "External / Secondary"
+                    else -> "Secondary"
                 }
 
                 val sensorSize = chars.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
                 val megapixels = if (sensorSize != null) {
                     val mp = (sensorSize.width * sensorSize.height) / 1_000_000.0
-                    String.format("%.1f MP (%dx%d)", mp, sensorSize.width, sensorSize.height)
+                    String.format("%.1f MP", mp)
                 } else "Unknown"
 
-                val orientation = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
                 val flashAvailable = chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
-
-                list.add(
-                    CameraSpecInfo(
-                        id = id,
-                        facing = facingStr,
-                        megapixels = megapixels,
-                        sensorOrientation = orientation,
-                        hasFlash = flashAvailable
-                    )
-                )
+                list.add(CameraSpecInfo(id = id, facing = facingStr, megapixels = megapixels, hasFlash = flashAvailable))
             }
         }
         return list
-    }
-
-    fun extractWifi(context: Context): WifiSpecInfo {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-        if (wifiManager == null) {
-            return WifiSpecInfo(isSupported = false, isEnabled = false, is5GHzSupported = false, is6GHzSupported = false, linkSpeedMbps = 0)
-        }
-
-        val is5G = wifiManager.is5GHzBandSupported
-        val is6G = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) wifiManager.is6GHzBandSupported else false
-        val speed = wifiManager.connectionInfo?.linkSpeed ?: 0
-
-        return WifiSpecInfo(
-            isSupported = true,
-            isEnabled = wifiManager.isWifiEnabled,
-            is5GHzSupported = is5G,
-            is6GHzSupported = is6G,
-            linkSpeedMbps = speed
-        )
-    }
-
-    fun extractBluetooth(context: Context): BluetoothSpecInfo {
-        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        val adapter: BluetoothAdapter? = btManager?.adapter
-
-        if (adapter == null) {
-            return BluetoothSpecInfo(isSupported = false, isEnabled = false, leSupported = false)
-        }
-
-        val hasLe = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_BLUETOOTH_LE)
-
-        return BluetoothSpecInfo(
-            isSupported = true,
-            isEnabled = adapter.isEnabled,
-            leSupported = hasLe
-        )
     }
 
     fun extractAll(context: Context): ComprehensiveDeviceSpec {
@@ -269,14 +197,7 @@ object ComprehensiveExtractor {
 
         val statusInt = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         val isCharging = statusInt == BatteryManager.BATTERY_STATUS_CHARGING || statusInt == BatteryManager.BATTERY_STATUS_FULL
-        val batteryStatusText = if (isCharging) "Charging (Active)" else "Discharging"
-
-        val healthInt = batteryStatus?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1) ?: -1
-        val healthText = when (healthInt) {
-            BatteryManager.BATTERY_HEALTH_GOOD -> "Optimal Good"
-            BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheated"
-            else -> "Nominal"
-        }
+        val batteryStatusText = if (isCharging) "Charging" else "Discharging"
         val voltage = batteryStatus?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
         val temp = (batteryStatus?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
 
@@ -284,22 +205,26 @@ object ComprehensiveExtractor {
         val dm = context.resources.displayMetrics
         val res = "${dm.widthPixels} x ${dm.heightPixels}"
 
-        // Network
+        // Connectivity
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        val wifiState = if (wifiManager?.isWifiEnabled == true) "Active / Connected" else "Disabled"
+
+        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val btAdapter: BluetoothAdapter? = btManager?.adapter
+        val btState = if (btAdapter?.isEnabled == true) "Active / Ready" else "Disabled"
+
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val activeNetwork = cm.activeNetwork
         val caps = cm.getNetworkCapabilities(activeNetwork)
         val networkText = when {
-            caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi High-Speed Network"
-            caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "Cellular LTE / 5G Mobile"
-            else -> "Disconnected / Offline"
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi High Speed"
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "Cellular Data"
+            else -> "Offline"
         }
 
         // Root
         val rootPaths = arrayOf("/system/app/Superuser.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su")
         val isRooted = rootPaths.any { File(it).exists() }
-
-        // Kernel
-        val kernel = System.getProperty("os.version") ?: "Linux Unknown"
 
         return ComprehensiveDeviceSpec(
             model = Build.MODEL,
@@ -316,35 +241,35 @@ object ComprehensiveExtractor {
             apiLevel = Build.VERSION.SDK_INT,
             buildId = Build.DISPLAY,
             securityPatch = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Build.VERSION.SECURITY_PATCH else "N/A",
-            kernelVersion = kernel,
+            kernelVersion = System.getProperty("os.version") ?: "Linux",
             batteryLevel = batteryPct,
             batteryStatusStr = batteryStatusText,
-            batteryHealthStr = healthText,
             batteryTemp = temp,
             batteryVoltage = voltage,
             screenResolution = res,
             screenDensityDpi = dm.densityDpi,
             activeCores = Runtime.getRuntime().availableProcessors(),
             networkType = networkText,
+            wifiState = wifiState,
+            bluetoothState = btState,
             isRooted = isRooted,
-            cameras = extractCameras(context),
-            wifiInfo = extractWifi(context),
-            bluetoothInfo = extractBluetooth(context)
+            cameras = extractCameras(context)
         )
     }
 }
 
-// --- MAIN EXECUTIVE DASHBOARD SCREEN ---
+// --- MAIN CLEAN TWO-SCREEN DASHBOARD ---
 
 @Composable
-fun ExecutiveDeviceApp() {
+fun CleanDeviceInfoApp() {
     val context = LocalContext.current
     var deviceSpec by remember { mutableStateOf<ComprehensiveDeviceSpec?>(null) }
     var cpuCores by remember { mutableStateOf<List<CpuCoreInfo>>(emptyList()) }
-    var activeTab by remember { mutableStateOf(NavigationTab.HARDWARE) }
     var uptimeSeconds by remember { mutableLongStateOf(SystemClock.elapsedRealtime() / 1000) }
 
-    // Instant initial load & real-time core monitoring loops
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
+
     LaunchedEffect(Unit) {
         deviceSpec = ComprehensiveExtractor.extractAll(context)
         while (true) {
@@ -368,30 +293,34 @@ fun ExecutiveDeviceApp() {
     ) {
         deviceSpec?.let { spec ->
             Column(modifier = Modifier.fillMaxSize()) {
-                // Top Header Section
+                // Header Bar
                 HeaderView(manufacturer = spec.manufacturer, model = spec.model)
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Hero Uptime Banner Card
+                // Active Uptime Ticker
                 UptimeHeroCard(uptimeSeconds = uptimeSeconds)
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Glassmorphic Tab Navigation
-                GlassTabBar(selectedTab = activeTab, onTabSelected = { activeTab = it })
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Tab Content Switcher
-                Box(modifier = Modifier.weight(1f)) {
-                    when (activeTab) {
-                        NavigationTab.HARDWARE -> HardwareTabContent(spec)
-                        NavigationTab.CPU_CORES -> CpuCoresTabContent(cpuCores)
-                        NavigationTab.CONNECTIVITY -> ConnectivityTabContent(spec)
-                        NavigationTab.CAMERA -> CameraTabContent(spec.cameras)
-                        NavigationTab.SOFTWARE -> SoftwareTabContent(spec)
-                        NavigationTab.SENSORS -> SensorsTabContent(context)
+                // Clean 2-Tab Navigation Switcher
+                TwoTabSelector(
+                    selectedIndex = pagerState.currentPage,
+                    onTabSelected = { page ->
+                        coroutineScope.launch { pagerState.animateScrollToPage(page) }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Horizontal Swipe View
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f)
+                ) { page ->
+                    when (page) {
+                        0 -> HardwareDashboard(spec = spec, cpuCores = cpuCores)
+                        1 -> SoftwareDashboard(spec = spec, context = context)
                     }
                 }
             }
@@ -402,7 +331,220 @@ fun ExecutiveDeviceApp() {
     }
 }
 
-// --- HEADER & NAVIGATION ---
+// --- TAB 1: HARDWARE DASHBOARD ---
+
+@Composable
+fun HardwareDashboard(spec: ComprehensiveDeviceSpec, cpuCores: List<CpuCoreInfo>) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        item {
+            GaugeMetricRow(
+                title1 = "RAM MEMORY",
+                val1 = "${spec.availRamGb} GB Free",
+                sub1 = "Total ${spec.totalRamGb} GB",
+                pct1 = spec.ramUsagePercent,
+                color1 = Color(0xFF00E5FF),
+                title2 = "STORAGE SPACE",
+                val2 = "${spec.freeStorageGb} GB Free",
+                sub2 = "Total ${spec.totalStorageGb} GB",
+                pct2 = spec.storageUsagePercent,
+                color2 = Color(0xFF7C4DFF)
+            )
+        }
+
+        item {
+            ExecutiveInfoCard(
+                title = "Processor & Core Cluster",
+                items = listOf(
+                    "SOC Hardware" to spec.socName.uppercase(),
+                    "Board Code" to spec.board,
+                    "Active CPU Cores" to "${spec.activeCores} Cores",
+                    "Security Status" to if (spec.isRooted) "Rooted System" else "Official / Enforced"
+                )
+            )
+        }
+
+        item {
+            CpuFrequencyCard(cpuCores = cpuCores)
+        }
+
+        item {
+            ExecutiveInfoCard(
+                title = "Camera Modules",
+                items = spec.cameras.map { cam ->
+                    "Camera ID ${cam.id} (${cam.facing})" to "${cam.megapixels} ${if (cam.hasFlash) "⚡ Flash" else ""}"
+                }
+            )
+        }
+
+        item {
+            ExecutiveInfoCard(
+                title = "Wireless Hardware & Network",
+                items = listOf(
+                    "Wi-Fi Hardware" to spec.wifiState,
+                    "Bluetooth Node" to spec.bluetoothState,
+                    "Network Type" to spec.networkType
+                )
+            )
+        }
+    }
+}
+
+// --- TAB 2: SOFTWARE & SENSORS DASHBOARD ---
+
+@Composable
+fun SoftwareDashboard(spec: ComprehensiveDeviceSpec, context: Context) {
+    val sensorManager = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
+    val sensors = remember { sensorManager.getSensorList(Sensor.TYPE_ALL) }
+
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        item {
+            GaugeMetricRow(
+                title1 = "BATTERY POWER",
+                val1 = "${spec.batteryLevel}%",
+                sub1 = spec.batteryStatusStr,
+                pct1 = spec.batteryLevel,
+                color1 = Color(0xFF00E676),
+                title2 = "THERMAL NODE",
+                val2 = "${spec.batteryTemp}°C",
+                sub2 = "${spec.batteryVoltage} mV",
+                pct2 = ((spec.batteryTemp / 60f) * 100).toInt().coerceIn(0, 100),
+                color2 = Color(0xFFFF9100)
+            )
+        }
+
+        item {
+            ExecutiveInfoCard(
+                title = "System Operating System",
+                items = listOf(
+                    "Android Version" to "Android ${spec.androidVersion}",
+                    "SDK API Level" to "API ${spec.apiLevel}",
+                    "Build ID" to spec.buildId,
+                    "Security Patch" to spec.securityPatch,
+                    "Kernel Release" to spec.kernelVersion
+                )
+            )
+        }
+
+        item {
+            ExecutiveInfoCard(
+                title = "Display Panel Specs",
+                items = listOf(
+                    "Screen Resolution" to spec.screenResolution,
+                    "Pixel Density" to "${spec.screenDensityDpi} DPI"
+                )
+            )
+        }
+
+        item {
+            ExecutiveInfoCard(
+                title = "System Sensor Hardware (${sensors.size} Sensors)",
+                items = sensors.take(6).map { sensor ->
+                    sensor.name to "${sensor.power} mA"
+                }
+            )
+        }
+    }
+}
+
+// --- REUSABLE UI COMPONENTS ---
+
+@Composable
+fun TwoTabSelector(
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF111420))
+            .border(1.dp, Color(0xFF1E2638), RoundedCornerShape(16.dp))
+            .padding(4.dp)
+    ) {
+        val tabs = listOf("HARDWARE DETAILS", "SOFTWARE DETAILS")
+        tabs.forEachIndexed { index, title ->
+            val isSelected = selectedIndex == index
+            val bgAlpha by animateFloatAsState(if (isSelected) 0.25f else 0.0f, label = "tabAlpha")
+            val textColor = if (isSelected) Color(0xFF00E5FF) else Color.Gray
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF00E5FF).copy(alpha = bgAlpha))
+                    .clickable { onTabSelected(index) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title,
+                    color = textColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CpuFrequencyCard(cpuCores: List<CpuCoreInfo>) {
+    ExecutiveGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "LIVE CPU FREQUENCIES",
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        cpuCores.forEachIndexed { index, core ->
+            val pct = if (core.maxFreqMhz > 0) ((core.curFreqMhz.toFloat() / core.maxFreqMhz) * 100).toInt() else 0
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Core #${core.coreIndex}",
+                    color = Color.Gray,
+                    fontSize = 11.sp
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (core.curFreqMhz > 0) "${core.curFreqMhz} MHz" else "Idle",
+                        color = Color(0xFF00E5FF),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    LinearProgressIndicator(
+                        progress = { (pct / 100f).coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .width(60.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = Color(0xFF00E5FF),
+                        trackColor = Color.White.copy(alpha = 0.1f)
+                    )
+                }
+            }
+            if (index < cpuCores.size - 1) {
+                HorizontalDivider(color = Color(0xFF1E2435), thickness = 0.8.dp)
+            }
+        }
+    }
+}
 
 @Composable
 fun HeaderView(manufacturer: String, model: String) {
@@ -413,7 +555,7 @@ fun HeaderView(manufacturer: String, model: String) {
     ) {
         Column {
             Text(
-                text = "EXECUTIVE DIAGNOSTICS",
+                text = "SYSTEM MONITOR",
                 color = Color(0xFF00E5FF),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
@@ -422,7 +564,7 @@ fun HeaderView(manufacturer: String, model: String) {
             Text(
                 text = "${manufacturer.uppercase()} ${model.uppercase()}",
                 color = Color.White,
-                fontSize = 20.sp,
+                fontSize = 19.sp,
                 fontWeight = FontWeight.ExtraBold
             )
         }
@@ -447,7 +589,7 @@ fun UptimeHeroCard(uptimeSeconds: Long) {
         ) {
             Column {
                 Text(
-                    text = "ACTIVE SYSTEM UPTIME",
+                    text = "ACTIVE UPTIME",
                     color = Color(0xFF8E9BAE),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -457,13 +599,13 @@ fun UptimeHeroCard(uptimeSeconds: Long) {
                 Text(
                     text = uptimeFormatted,
                     color = Color(0xFF00E5FF),
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
                 )
             }
             Text(
-                text = "LIVE TICKER",
+                text = "ONLINE",
                 color = Color(0xFF7C4DFF),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -472,296 +614,6 @@ fun UptimeHeroCard(uptimeSeconds: Long) {
         }
     }
 }
-
-@Composable
-fun GlassTabBar(
-    selectedTab: NavigationTab,
-    onTabSelected: (NavigationTab) -> Unit
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        items(NavigationTab.values().size) { index ->
-            val tab = NavigationTab.values()[index]
-            val isSelected = selectedTab == tab
-            val bgAlpha by animateFloatAsState(if (isSelected) 0.30f else 0.05f, label = "tabBg")
-            val textColor = if (isSelected) Color(0xFF00E5FF) else Color.Gray
-
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF00E5FF).copy(alpha = bgAlpha))
-                    .border(
-                        1.dp,
-                        if (isSelected) Color(0xFF00E5FF).copy(alpha = 0.5f) else Color(0xFF1E2638),
-                        RoundedCornerShape(12.dp)
-                    )
-                    .clickable { onTabSelected(tab) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = tab.title.uppercase(),
-                    color = textColor,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                )
-            }
-        }
-    }
-}
-
-// --- TAB CONTENT IMPLEMENTATIONS ---
-
-@Composable
-fun HardwareTabContent(spec: ComprehensiveDeviceSpec) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            GaugeMetricRow(
-                title1 = "RAM ALLOCATION",
-                val1 = "${spec.availRamGb} GB",
-                sub1 = "Free of ${spec.totalRamGb} GB",
-                pct1 = spec.ramUsagePercent,
-                color1 = Color(0xFF00E5FF),
-                title2 = "STORAGE MEMORY",
-                val2 = "${spec.freeStorageGb} GB",
-                sub2 = "Free of ${spec.totalStorageGb} GB",
-                pct2 = spec.storageUsagePercent,
-                color2 = Color(0xFF7C4DFF)
-            )
-        }
-        item {
-            ExecutiveInfoCard(
-                title = "Processor & Core Cluster",
-                items = listOf(
-                    "SOC Hardware" to spec.socName.uppercase(),
-                    "Board Name" to spec.board,
-                    "Total Cores" to "${spec.activeCores} CPU Cores",
-                    "Root Access" to if (spec.isRooted) "Detected (Rooted)" else "Enforced (Protected)"
-                )
-            )
-        }
-        item {
-            ExecutiveInfoCard(
-                title = "Display Panel Specification",
-                items = listOf(
-                    "Native Resolution" to spec.screenResolution,
-                    "Pixel Density" to "${spec.screenDensityDpi} DPI"
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun CpuCoresTabContent(cores: List<CpuCoreInfo>) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            Text(
-                text = "REAL-TIME CPU CLUSTER FREQUENCIES (${cores.size} CORES)",
-                color = Color.Gray,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
-        items(cores.size) { index ->
-            val core = cores[index]
-            val pct = if (core.maxFreqMhz > 0) ((core.curFreqMhz.toFloat() / core.maxFreqMhz) * 100).toInt() else 0
-
-            ExecutiveGlassCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "CPU Core #${core.coreIndex}",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (core.maxFreqMhz > 0) "Max Cap: ${core.maxFreqMhz} MHz" else "Offline / Scaled Down",
-                            color = Color.Gray,
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = if (core.curFreqMhz > 0) "${core.curFreqMhz} MHz" else "Idle",
-                            color = Color(0xFF00E5FF),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        // Mini Linear Progress Indicator
-                        LinearProgressIndicator(
-                            progress = { (pct / 100f).coerceIn(0f, 1f) },
-                            modifier = Modifier.width(80.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
-                            color = Color(0xFF00E5FF),
-                            trackColor = Color.White.copy(alpha = 0.1f)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ConnectivityTabContent(spec: ComprehensiveDeviceSpec) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            ExecutiveInfoCard(
-                title = "Wi-Fi Hardware Node",
-                items = listOf(
-                    "Hardware Supported" to if (spec.wifiInfo.isSupported) "Present" else "Absent",
-                    "Radio State" to if (spec.wifiInfo.isEnabled) "Enabled & Active" else "Disabled",
-                    "5 GHz Band Support" to if (spec.wifiInfo.is5GHzSupported) "Supported" else "Not Supported",
-                    "6 GHz Wi-Fi 6E/7" to if (spec.wifiInfo.is6GHzSupported) "Supported" else "Not Supported",
-                    "Current Link Speed" to "${spec.wifiInfo.linkSpeedMbps} Mbps"
-                )
-            )
-        }
-        item {
-            ExecutiveInfoCard(
-                title = "Bluetooth Hardware Node",
-                items = listOf(
-                    "Hardware Adapter" to if (spec.bluetoothInfo.isSupported) "Present" else "Absent",
-                    "Radio Power State" to if (spec.bluetoothInfo.isEnabled) "ON" else "OFF",
-                    "Bluetooth LE (Low Energy)" to if (spec.bluetoothInfo.leSupported) "Supported" else "Not Supported"
-                )
-            )
-        }
-        item {
-            ExecutiveInfoCard(
-                title = "Network Connection State",
-                items = listOf(
-                    "Active Interface" to spec.networkType
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun CameraTabContent(cameras: List<CameraSpecInfo>) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            Text(
-                text = "DETECTED CAMERA SENSORS (${cameras.size})",
-                color = Color.Gray,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
-        items(cameras.size) { index ->
-            val cam = cameras[index]
-            ExecutiveInfoCard(
-                title = "Camera ID: ${cam.id} (${cam.facing})",
-                items = listOf(
-                    "Resolution" to cam.megapixels,
-                    "Sensor Orientation" to "${cam.sensorOrientation}°",
-                    "Flash Hardware" to if (cam.hasFlash) "Available" else "Not Available"
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun SoftwareTabContent(spec: ComprehensiveDeviceSpec) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            GaugeMetricRow(
-                title1 = "BATTERY LEVEL",
-                val1 = "${spec.batteryLevel}%",
-                sub1 = spec.batteryStatusStr,
-                pct1 = spec.batteryLevel,
-                color1 = Color(0xFF00E676),
-                title2 = "THERMAL NODE",
-                val2 = "${spec.batteryTemp}°C",
-                sub2 = "${spec.batteryVoltage} mV",
-                pct2 = ((spec.batteryTemp / 60f) * 100).toInt().coerceIn(0, 100),
-                color2 = Color(0xFFFF9100)
-            )
-        }
-        item {
-            ExecutiveInfoCard(
-                title = "Operating System & Build Details",
-                items = listOf(
-                    "Android Version" to "Android ${spec.androidVersion}",
-                    "SDK API Level" to "API ${spec.apiLevel}",
-                    "Build ID" to spec.buildId,
-                    "Security Patch" to spec.securityPatch,
-                    "Kernel Release" to spec.kernelVersion
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun SensorsTabContent(context: Context) {
-    val sensorManager = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
-    val sensors = remember { sensorManager.getSensorList(Sensor.TYPE_ALL) }
-
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            Text(
-                text = "SYSTEM SENSOR MODULES (${sensors.size})",
-                color = Color.Gray,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-        }
-        items(sensors.size) { index ->
-            val sensor = sensors[index]
-            ExecutiveGlassCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = sensor.name,
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Vendor: ${sensor.vendor}",
-                            color = Color.Gray,
-                            fontSize = 10.sp
-                        )
-                    }
-                    Text(
-                        text = "${sensor.power} mA",
-                        color = Color(0xFF00E5FF),
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-        }
-    }
-}
-
-// --- REUSABLE GLASS COMPONENTS ---
 
 @Composable
 fun ExecutiveGlassCard(
@@ -853,7 +705,7 @@ fun ExecutiveGaugeCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(text = value, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(text = value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Text(text = subText, color = Color.Gray, fontSize = 9.sp)
             }
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(36.dp)) {
