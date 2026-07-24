@@ -24,6 +24,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -260,6 +261,7 @@ object ComprehensiveExtractor {
 
 // --- MAIN CLEAN TWO-SCREEN DASHBOARD ---
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CleanDeviceInfoApp() {
     val context = LocalContext.current
