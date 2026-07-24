@@ -26,10 +26,7 @@
 
   <br><br>
 
-  <!-- Interactive Visual Preview Space -->
-  <a href="docs/screenshots/preview.png">
-    <img src="docs/screenshots/preview.png" width="360" alt="ZenPulse Interface Preview" style="border: 2px solid #00FF9D; border-radius: 16px; box-shadow: 0 0 35px rgba(0, 255, 157, 0.35);">
-  </a>
+  <!-- Image coming soon -->
 
   <br><br>
 
