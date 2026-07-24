@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DeviceInfoApp" parent="android:Theme.Material.NoActionBar">
-        <!-- System bar status settings -->
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-    </style>
+    <!-- Kept empty or used for custom sub-styles to prevent duplicates with themes.xml -->
 </resources>
