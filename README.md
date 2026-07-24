@@ -1,38 +1,46 @@
 <div align="center">
 
-  <!-- Matrix Typing SVG Banner -->
+  <!-- Dynamic Typing Banner -->
   <h1 align="center">
-    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=30&pause=1000&color=00FF9D&center=true&vCenter=true&width=600&lines=%3E_DEVICE+INSIGHT+HUD;%3E_SYSTEM+DIAGNOSTICS+CONSOLE;%3E_DEVELOPED+BY+SANDEEP+SOM" alt="Matrix Terminal Header" />
+    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=30&pause=1000&color=00FF9D&center=true&vCenter=true&width=650&lines=%3E_ZEN_PULSE+AESTHETIC+ENGINE;%3E_GPU+AGSL+SHADER+FRAMEWORK;%3E_PHYSICS-DRIVEN+SENSORY+UI;%3E_DEVELOPED+BY+SANDEEP+SOM" alt="Terminal Header" />
   </h1>
 
-  <p><strong>HARDWARE TELEMETRY & SYSTEM DIAGNOSTICS ENGINE • v3.0.0</strong></p>
+  <p><strong>FLUID AESTHETIC ENGINE & SENSORY GRAPHICS PLATFORM • v1.0.0</strong></p>
   <p><em>Architected & Developed by <strong>SANDEEP SOM</strong> • <code>@sandeep26dc</code></em></p>
 
   <br>
 
-  <!-- Status LED Badges -->
-  <a href="https://github.com/sandeep26dc/DeviceInfoApp/actions">
-    <img src="https://img.shields.io/badge/SYS_STATUS-OPTIMAL-00FF9D?style=for-the-badge&logo=gnubash&logoColor=black" alt="Status">
+  <!-- High-Tech Badges -->
+  <a href="https://github.com/sandeep26dc">
+    <img src="https://img.shields.io/badge/ENGINE_STATE-FLUID_60FPS-00FF9D?style=for-the-badge&logo=android&logoColor=black" alt="Status">
   </a>
   <a href="https://kotlinlang.org/">
-    <img src="https://img.shields.io/badge/KERNEL-KOTLIN_2.0-00FF9D?style=for-the-badge&logo=kotlin&logoColor=black" alt="Kotlin">
+    <img src="https://img.shields.io/badge/CORE-KOTLIN_2.0-00FF9D?style=for-the-badge&logo=kotlin&logoColor=black" alt="Kotlin">
   </a>
   <a href="https://developer.android.com/jetpack/compose">
-    <img src="https://img.shields.io/badge/HUD-COMPOSE_UI-00F0FF?style=for-the-badge&logo=android&logoColor=black" alt="Compose">
+    <img src="https://img.shields.io/badge/UI-JETPACK_COMPOSE-00F0FF?style=for-the-badge&logo=jetpackcompose&logoColor=black" alt="Compose">
   </a>
-  <a href="https://github.com/sandeep26dc/DeviceInfoApp/releases">
-    <img src="https://img.shields.io/badge/DEPLOY-DEBUG_APK-05070A?style=for-the-badge&logo=android&logoColor=00FF9D" alt="APK">
+  <a href="https://rive.app/">
+    <img src="https://img.shields.io/badge/PHYSICS-RIVE_NATIVE-7D5260?style=for-the-badge&logo=rive&logoColor=white" alt="Rive Engine">
   </a>
 
   <br><br>
 
-  <!-- Device Frame Mockup (Note: Replace this image once you upload to docs/screenshots/ terminal_preview.png) -->
-  <img src="docs/screenshots/terminal_preview.png" width="340" alt="DeviceInfoApp HUD Interface" style="border: 2px solid #00FF9D; border-radius: 12px; box-shadow: 0 0 25px rgba(0, 255, 157, 0.4);">
+  <!-- Interactive Visual Preview Space -->
+  <a href="docs/screenshots/preview.png">
+    <img src="docs/screenshots/preview.png" width="360" alt="ZenPulse Interface Preview" style="border: 2px solid #00FF9D; border-radius: 16px; box-shadow: 0 0 35px rgba(0, 255, 157, 0.35);">
+  </a>
 
   <br><br>
 
-  <p width="82%">
-    <code>DEVICE_INFO_APP</code> is a deep-level hardware diagnostic suite for Android. Architected by <strong>SANDEEP SOM</strong>, it bypasses high-level OS abstracts to stream raw hardware metrics—from real-time CPU core frequencies and thermal throttling limits to battery wear states and live RAM allocation.
+  <p width="85%">
+    <code>ZEN_PULSE</code> is a next-generation Android visual framework designed to break away from static, rigid mobile UIs. Bypassing traditional layout constraints, it leverages real-time <strong>GPU shading (AGSL)</strong>, <strong>accelerometer-bound vector physics</strong>, and <strong>spring-dampened motion models</strong> to deliver an ultra-fluid, tactile, and calming digital environment.
   </p>
 
 </div>
+
+---
+
+## 🌌 Visual & Physics Architecture
+
+This app is built around three core pillars engineered to turn interactions into physical, living moments:
