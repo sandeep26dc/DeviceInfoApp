@@ -4,25 +4,22 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.os.StatFs
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,395 +27,374 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import java.io.File
+import kotlin.math.roundToInt
+
+// --- DATA STRUCTURE FOR EXTRACTED HARDWARE DETAILS ---
+data class DeviceSpec(
+    val model: String,
+    val manufacturer: String,
+    val socName: String,
+    val totalRamGb: Double,
+    val availRamGb: Double,
+    val ramUsagePercent: Int,
+    val androidVersion: String,
+    val apiLevel: Int,
+    val batteryLevel: Int,
+    val batteryStatusStr: String,
+    val screenResolution: String,
+    val screenDensityDpi: Int
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            ExecutiveDeviceInfoApp()
+            MaterialTheme {
+                PremiumDeviceDashboard()
+            }
         }
     }
 }
 
+// --- HARDWARE EXTRACTION UTILITY ---
+object DeviceExtractor {
+    fun extractAll(context: Context): DeviceSpec {
+        // RAM Metrics
+        val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memInfo = ActivityManager.MemoryInfo()
+        actManager.getMemoryInfo(memInfo)
+
+        val totalRam = memInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
+        val availRam = memInfo.availMem / (1024.0 * 1024.0 * 1024.0)
+        val usedRam = totalRam - availRam
+        val ramPercent = ((usedRam / totalRam) * 100).toInt()
+
+        // Battery Metrics
+        val batteryStatus: Intent? = IntentFilter(Intent.ACTION_BATTERY_CHANGED).let { filter ->
+            context.registerReceiver(null, filter)
+        }
+        val level: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        val batteryPct = if (level != -1 && scale != -1) ((level / scale.toFloat()) * 100).toInt() else 0
+
+        val statusInt = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val isCharging = statusInt == BatteryManager.BATTERY_STATUS_CHARGING ||
+                statusInt == BatteryManager.BATTERY_STATUS_FULL
+        val batteryStatusText = if (isCharging) "Charging" else "Discharging"
+
+        // Display Metrics
+        val displayMetrics = context.resources.displayMetrics
+        val res = "${displayMetrics.widthPixels} x ${displayMetrics.heightPixels}"
+
+        return DeviceSpec(
+            model = Build.MODEL,
+            manufacturer = Build.MANUFACTURER,
+            socName = Build.HARDWARE,
+            totalRamGb = (totalRam * 10.0).roundToInt() / 10.0,
+            availRamGb = (availRam * 10.0).roundToInt() / 10.0,
+            ramUsagePercent = ramPercent,
+            androidVersion = Build.VERSION.RELEASE,
+            apiLevel = Build.VERSION.SDK_INT,
+            batteryLevel = batteryPct,
+            batteryStatusStr = batteryStatusText,
+            screenResolution = res,
+            screenDensityDpi = displayMetrics.densityDpi
+        )
+    }
+}
+
+// --- GLASSMORPHIC CONTAINER COMPONENT ---
 @Composable
-fun ExecutiveDeviceInfoApp() {
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 20.dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val glassShape = RoundedCornerShape(cornerRadius)
+    val glassBackground = Color(0xFF131822).copy(alpha = 0.75f)
+    
+    // Glowing neon border gradient
+    val borderGradient = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF00E5FF).copy(alpha = 0.45f),
+            Color(0xFF7C4DFF).copy(alpha = 0.20f),
+            Color.Transparent
+        )
+    )
+
+    Column(
+        modifier = modifier
+            .clip(glassShape)
+            .background(glassBackground)
+            .border(width = 1.dp, brush = borderGradient, shape = glassShape)
+            .padding(16.dp),
+        content = content
+    )
+}
+
+// --- MAIN EXECUTIVE DASHBOARD SCREEN ---
+@Composable
+fun PremiumDeviceDashboard() {
     val context = LocalContext.current
+    var deviceData by remember { mutableStateOf<DeviceSpec?>(null) }
     var uptimeSeconds by remember { mutableLongStateOf(SystemClock.elapsedRealtime() / 1000) }
 
-    // Live 1-second ticker loop for real-time uptime telemetry
+    // Instant Data Extraction on App Open
     LaunchedEffect(Unit) {
+        deviceData = DeviceExtractor.extractAll(context)
+        
+        // Continuous Live Uptime Ticker
         while (true) {
-            uptimeSeconds = SystemClock.elapsedRealtime() / 1000
             delay(1000)
+            uptimeSeconds = SystemClock.elapsedRealtime() / 1000
         }
     }
 
-    val batteryInfo = remember(uptimeSeconds) { getBatteryInfo(context) }
-    val ramInfo = remember(uptimeSeconds) { getRamInfo(context) }
-    val storageInfo = remember { getStorageInfo() }
-    val networkInfo = remember(uptimeSeconds) { getNetworkInfo(context) }
+    val darkGradient = Brush.verticalGradient(
+        colors = listOf(Color(0xFF0B0D14), Color(0xFF040508))
+    )
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF090A0F)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Spacer(modifier = Modifier.height(16.dp))
-            HeaderSection()
-
-            Spacer(modifier = Modifier.height(20.dp))
-            UptimeLiveTickerCard(uptimeSeconds = uptimeSeconds)
-
-            Spacer(modifier = Modifier.height(16.dp))
-            CategoryHeader(title = "SYSTEM & HARDWARE MATRIX")
-            
-            GlassInfoCard(
-                title = "SOC Architecture",
-                items = listOf(
-                    "Device Model" to "${Build.MANUFACTURER.uppercase()} ${Build.MODEL} (${Build.DEVICE})",
-                    "SOC Hardware" to Build.HARDWARE,
-                    "Board Name" to Build.BOARD,
-                    "CPU Instruction Sets" to Build.SUPPORTED_ABIS.joinToString(", "),
-                    "Active CPU Cores" to Runtime.getRuntime().availableProcessors().toString()
-                )
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            GlassInfoCard(
-                title = "Software & Kernel",
-                items = listOf(
-                    "Android Version" to "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-                    "Build ID" to Build.DISPLAY,
-                    "Security Patch" to Build.VERSION.SECURITY_PATCH,
-                    "Kernel Release" to System.getProperty("os.version").orEmpty(),
-                    "Root Status" to if (checkRoot()) "Access Granted (Rooted)" else "Protected (Enforced)"
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-            CategoryHeader(title = "MEMORY & TELEMETRY")
-
-            GlassInfoCard(
-                title = "RAM Allocation",
-                items = listOf(
-                    "Total RAM" to ramInfo.first,
-                    "Available Memory" to ramInfo.second,
-                    "Memory Threshold" to ramInfo.third
-                )
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            GlassInfoCard(
-                title = "Internal Storage",
-                items = listOf(
-                    "Total Internal" to storageInfo.first,
-                    "Free Storage" to storageInfo.second
-                )
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            GlassInfoCard(
-                title = "Power & Battery Node",
-                items = listOf(
-                    "Battery Level" to "${batteryInfo.level}%",
-                    "Power Source" to batteryInfo.plugged,
-                    "Battery Health" to batteryInfo.health,
-                    "Voltage" to "${batteryInfo.voltage} mV",
-                    "Temperature" to "${batteryInfo.temperature} °C"
-                )
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            GlassInfoCard(
-                title = "Network Interfaces",
-                items = listOf(
-                    "Connection Type" to networkInfo.first,
-                    "Link Bandwidth" to networkInfo.second
-                )
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-        }
-    }
-}
-
-@Composable
-fun HeaderSection() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(
-                text = "EXECUTIVE TELEMETRY",
-                color = Color(0xFF00E5FF),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            Text(
-                text = "Device Matrix",
-                color = Color.White,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF00E5FF), Color(0xFF0055FF))
-                    )
-                )
-                .padding(1.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(Color(0xFF0F111A)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "I/O",
-                color = Color(0xFF00E5FF),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
-        }
-    }
-}
-
-@Composable
-fun UptimeLiveTickerCard(uptimeSeconds: Long) {
-    val days = uptimeSeconds / 86400
-    val hours = (uptimeSeconds % 86400) / 3600
+    val hours = uptimeSeconds / 3600
     val minutes = (uptimeSeconds % 3600) / 60
     val seconds = uptimeSeconds % 60
+    val uptimeFormatted = String.format("%02dh %02dm %02ds", hours, minutes, seconds)
 
-    val infiniteTransition = rememberInfiniteTransition(label = "Pulse")
-    val pulseAlpha by infiniteTransition.animateFloat(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(darkGradient)
+            .padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
+    ) {
+        deviceData?.let { spec ->
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top Header Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "SYSTEM ARCHITECTURE",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp
+                        )
+                        Text(
+                            text = "${spec.manufacturer.uppercase()} ${spec.model.uppercase()}",
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    
+                    // Live Status Pulsing Indicator
+                    PulsingStatusBadge()
+                }
+
+                // Hero SOC & Uptime Card
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "HARDWARE PLATFORM",
+                                color = Color(0xFF8E9BAE),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = spec.socName.uppercase(),
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "LIVE UPTIME",
+                                color = Color(0xFF8E9BAE),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = uptimeFormatted,
+                                color = Color(0xFF00E5FF),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Metric Grid Nodes
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    item {
+                        MetricArcTile(
+                            title = "RAM ALLOCATION",
+                            value = "${spec.availRamGb} GB",
+                            subText = "Free of ${spec.totalRamGb} GB",
+                            percentage = spec.ramUsagePercent,
+                            accentColor = Color(0xFF00E5FF)
+                        )
+                    }
+                    item {
+                        MetricArcTile(
+                            title = "BATTERY LEVEL",
+                            value = "${spec.batteryLevel}%",
+                            subText = spec.batteryStatusStr,
+                            percentage = spec.batteryLevel,
+                            accentColor = Color(0xFF7C4DFF)
+                        )
+                    }
+                    item {
+                        MetricGlassTile(
+                            title = "ANDROID OS",
+                            value = "Android ${spec.androidVersion}",
+                            subText = "SDK API Level ${spec.apiLevel}"
+                        )
+                    }
+                    item {
+                        MetricGlassTile(
+                            title = "DISPLAY PANEL",
+                            value = spec.screenResolution,
+                            subText = "${spec.screenDensityDpi} DPI Density"
+                        )
+                    }
+                }
+            }
+        } ?: CircularProgressIndicator(
+            color = Color(0xFF00E5FF),
+            modifier = Modifier.align(Alignment.Center)
+        )
+    }
+}
+
+// --- METRIC ARC TILE FOR GAUGES ---
+@Composable
+fun MetricArcTile(
+    title: String,
+    value: String,
+    subText: String,
+    percentage: Int,
+    accentColor: Color
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text(text = title, color = Color(0xFF8E9BAE), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text(text = value, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(text = subText, color = Color(0xFF5A6578), fontSize = 10.sp)
+            }
+
+            // Circular progress gauge
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(42.dp)) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawArc(
+                        color = Color.White.copy(alpha = 0.1f),
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawArc(
+                        color = accentColor,
+                        startAngle = -90f,
+                        sweepAngle = (360f * (percentage / 100f)),
+                        useCenter = false,
+                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                }
+                Text(
+                    text = "$percentage%",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// --- STANDARD METRIC TILE ---
+@Composable
+fun MetricGlassTile(title: String, value: String, subText: String) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text(text = title, color = Color(0xFF8E9BAE), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(text = value, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = subText, color = Color(0xFF5A6578), fontSize = 10.sp)
+    }
+}
+
+// --- PULSING STATUS BADGE ---
+@Composable
+fun PulsingStatusBadge() {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val alpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
-        targetValue = 1f,
+        targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(1000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "Alpha"
+        label = "alpha"
     )
 
-    Box(
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF101422))
-            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f), RoundedCornerShape(18.dp))
-            .padding(18.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF00E5FF).copy(alpha = 0.15f))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Column {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "ACTIVE SYSTEM UPTIME",
-                    color = Color.Gray,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF00E676).copy(alpha = pulseAlpha))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "LIVE",
-                        color = Color(0xFF00E676),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = String.format("%02dd %02dh %02dm %02ds", days, hours, minutes, seconds),
-                color = Color(0xFF00E5FF),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
-        }
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF00E5FF).copy(alpha = alpha))
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = "ACTIVE",
+            color = Color(0xFF00E5FF),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
-}
-
-@Composable
-fun CategoryHeader(title: String) {
-    Text(
-        text = title,
-        color = Color(0xFF8A94A6),
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.5.sp,
-        modifier = Modifier.padding(vertical = 4.dp)
-    )
-}
-
-@Composable
-fun GlassInfoCard(title: String, items: List<Pair<String, String>>) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF121520))
-            .border(1.dp, Color(0xFF1E2435), RoundedCornerShape(16.dp))
-            .padding(16.dp)
-    ) {
-        Column {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            items.forEachIndexed { index, pair ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = pair.first,
-                        color = Color.Gray,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = pair.second,
-                        color = Color(0xFFD1D5DB),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-                if (index < items.size - 1) {
-                    HorizontalDivider(
-                        color = Color(0xFF1A1F2C),
-                        thickness = 0.8.dp,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// System Data Extraction Helpers
-private fun checkRoot(): Boolean {
-    val paths = arrayOf(
-        "/system/app/Superuser.apk",
-        "/sbin/su",
-        "/system/bin/su",
-        "/system/xbin/su",
-        "/data/local/xbin/su",
-        "/data/local/bin/su",
-        "/system/sd/xbin/su",
-        "/system/bin/failsafe/su",
-        "/data/local/su"
-    )
-    return paths.any { File(it).exists() }
-}
-
-private fun getRamInfo(context: Context): Triple<String, String, String> {
-    val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    val memInfo = ActivityManager.MemoryInfo()
-    actManager.getMemoryInfo(memInfo)
-    val totalGB = String.format("%.2f GB", memInfo.totalMem.toDouble() / (1024 * 1024 * 1024))
-    val availGB = String.format("%.2f GB", memInfo.availMem.toDouble() / (1024 * 1024 * 1024))
-    val threshGB = String.format("%.2f GB", memInfo.threshold.toDouble() / (1024 * 1024 * 1024))
-    return Triple(totalGB, availGB, threshGB)
-}
-
-private fun getStorageInfo(): Pair<String, String> {
-    val stat = StatFs(Environment.getDataDirectory().path)
-    val totalBytes = stat.blockCountLong * stat.blockSizeLong
-    val freeBytes = stat.availableBlocksLong * stat.blockSizeLong
-    val totalGB = String.format("%.2f GB", totalBytes.toDouble() / (1024 * 1024 * 1024))
-    val freeGB = String.format("%.2f GB", freeBytes.toDouble() / (1024 * 1024 * 1024))
-    return Pair(totalGB, freeGB)
-}
-
-data class BatteryData(
-    val level: Int,
-    val plugged: String,
-    val health: String,
-    val voltage: Int,
-    val temperature: Float
-)
-
-private fun getBatteryInfo(context: Context): BatteryData {
-    val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-    val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-    val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-    val pct = if (level != -1 && scale != -1) (level * 100 / scale.toFloat()).toInt() else 0
-
-    val pluggedVal = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
-    val pluggedStr = when (pluggedVal) {
-        BatteryManager.BATTERY_PLUGGED_AC -> "AC Fast Charge"
-        BatteryManager.BATTERY_PLUGGED_USB -> "USB Port"
-        BatteryManager.BATTERY_PLUGGED_WIRELESS -> "Wireless Dock"
-        else -> "Discharging (Battery)"
-    }
-
-    val healthVal = intent?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1) ?: -1
-    val healthStr = when (healthVal) {
-        BatteryManager.BATTERY_HEALTH_GOOD -> "Optimal / Good"
-        BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheated"
-        BatteryManager.BATTERY_HEALTH_DEAD -> "Critical Fail"
-        BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "Over Voltage"
-        else -> "Nominal"
-    }
-
-    val voltage = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
-    val temp = (intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
-
-    return BatteryData(pct, pluggedStr, healthStr, voltage, temp)
-}
-
-private fun getNetworkInfo(context: Context): Pair<String, String> {
-    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    val network = cm.activeNetwork ?: return Pair("Offline / No Data", "0 Mbps")
-    val caps = cm.getNetworkCapabilities(network) ?: return Pair("Offline", "0 Mbps")
-
-    val type = when {
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi Interface"
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Cellular Data"
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
-        else -> "Active Link"
-    }
-
-    val speedMbps = caps.linkDownstreamBandwidthKbps / 1000
-    return Pair(type, "$speedMbps Mbps Downstream")
 }
